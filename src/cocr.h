@@ -9,6 +9,7 @@
 #define cocr_h
 #include <Cocoa/Cocoa.h>
 #include "SelectWindow.h"
+#include "ScreenCapture.h"
 
 #if defined(DEBUG)
 #define LOGF(MSG, ...)              \
@@ -23,7 +24,8 @@ do {                                \
 #endif
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
-@property (nonatomic, strong) CaptureWindow *captureWindow;
+@property (nonatomic, strong) SelectWindow *captureWindow;
+@property (nonatomic, strong) ScreenCapture *screenCapture;
 - (id)init;
 - (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y;
 @end

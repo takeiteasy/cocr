@@ -12,7 +12,7 @@
 @interface DashedBorderView : NSView
 @end
 
-@interface CaptureWindow : NSWindow
+@interface SelectWindow : NSWindow
 @property (nonatomic, strong) DashedBorderView *dashedBorderView;
 -(id)initWithPositionX:(NSInteger)x andY:(NSInteger)y;
 -(void)resizeWithMousePositionX:(NSInteger)x andY:(NSInteger)y;

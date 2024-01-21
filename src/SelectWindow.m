@@ -30,7 +30,7 @@
 }
 @end
 
-@implementation CaptureWindow {
+@implementation SelectWindow {
     NSInteger originX;
     NSInteger originY;
 }

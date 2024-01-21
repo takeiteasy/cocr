@@ -38,13 +38,22 @@ Settings settings;
     if (self = [super init]) {
         state.mousePosition = [NSEvent mouseLocation];
         _captureWindow = nil;
+        _screenCapture = nil;
     }
     return self;
 }
 
 - (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y {
-    _captureWindow = [[CaptureWindow alloc] initWithPositionX:x
+    LOGF(@"* WINDOW CREATED AT: %ld, %ld", x, y);
+    _captureWindow = [[SelectWindow alloc] initWithPositionX:x
                                                          andY:y];
+}
+
+- (void)initScreenCapture {
+    NSRect frame = [_captureWindow frame];
+    LOGF(@"* CAPTURING AT: x:%f, y:%f, w:%f, h:%f", frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
+    _screenCapture = [[ScreenCapture alloc] initWithFrame:frame];
+    [_screenCapture readText];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
@@ -74,6 +83,7 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
             if (state.dragging) {
                 [[state.delegate captureWindow] finalPosition:state.mousePosition.x
                                                          andY:state.mousePosition.y];
+                [state.delegate initScreenCapture];
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
                 CGEventTapEnable(state.tap, 0);
                 state.tap = nil;
