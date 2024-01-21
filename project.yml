@@ -1,0 +1,29 @@
+name: cocr
+
+options:
+  bundleIdPrefix: io.github.takeiteasy
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "12.0"
+
+settings:
+  GCC_C_LANGUAGE_STANDARD: c11
+  CLANG_WARN_DOCUMENTATION_COMMENTS: false
+
+targets:
+  cocr:
+    type: tool
+    platform: macOS
+    sources:
+      - path: src/
+      - path: project.yml
+        type: folder
+      - path: Makefile
+        type: folder
+      - path: README.md
+        type: folder
+      - path: assets/
+        type: folder
+    dependencies:
+        - sdk: Carbon.framework
+        - sdk: Cocoa.framework
