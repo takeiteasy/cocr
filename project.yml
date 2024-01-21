@@ -22,8 +22,7 @@ targets:
         type: folder
       - path: README.md
         type: folder
-      - path: assets/
-        type: folder
     dependencies:
         - sdk: Carbon.framework
         - sdk: Cocoa.framework
+        - sdk: Vision.framework

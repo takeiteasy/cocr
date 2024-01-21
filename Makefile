@@ -1,16 +1,7 @@
-build:
-	$(CC) -Isrc/ src/*.m -framework Carbon -framework Cocoa -o rcmd
+default:
+	$(CC) -Isrc/ src/*.m -framework Carbon -framework Cocoa -framework Vision -o cocr
 
-app: build
-	sh appify.sh -s cocr -n cocr
-
-install: build
+install: default
 	mv cocr /usr/local/bin
 
-install-app: app
-	mv cocr.app /Applications
-
-default: build
-all: app
-
-.PHONY: build default
+.PHONY: default
