@@ -23,144 +23,19 @@
  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include "cocr.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <Carbon/Carbon.h>
-#include <Cocoa/Cocoa.h>
 #include <getopt.h>
 
-#if defined(DEBUG)
-#define ENABLE_VERBOSE_MODE YES
-#else
-#define ENABLE_VERBOSE_MODE NO
-#endif
-
-#if defined(DEBUG)
-#define LOGF(MSG, ...)              \
-do {                                \
-    if (settings.enableVerboseMode) \
-        NSLog((MSG), __VA_ARGS__);  \
-} while(0)
-#define LOG(MSG) LOGF(@"%@", (MSG))
-#else
-#define LOGF(MSG, ...)
-#define LOG(MSG)
-#endif
-
-@interface DashedBorderView : NSView
-@end
-
-@interface CaptureWindow : NSWindow
-@property (nonatomic, strong) DashedBorderView *dashedBorderView;
--(id)initWithPositionX:(NSInteger)x andY:(NSInteger)y;
-@end
-
-@interface AppDelegate : NSObject <NSApplicationDelegate>
-@property (nonatomic, strong) NSStatusItem *statusBar;
-@property (nonatomic, strong) CaptureWindow *captureWindow;
-- (id)init;
-- (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y;
-@end
-
-static struct {
-    CFMachPortRef tap;
-    CFRunLoopSourceRef tapLoop;
-    AppDelegate *delegate;
-    NSPoint mousePosition;
-    BOOL dragging;
-} state;
-
-static struct {
-    BOOL enableVerboseMode;
-} settings;
-
-@implementation DashedBorderView
-- (void)drawRect:(NSRect)dirtyRect {
-    [super drawRect:dirtyRect];
-    // dash customization parameters
-    CGFloat dashPattern[] = {10, 6}; // 10 units on, 6 units off, for example
-    CGContextRef context = [[NSGraphicsContext currentContext] CGContext];
-    // Set the line color
-    CGContextSetStrokeColorWithColor(context, [NSColor colorWithRed:0.f
-                                                              green:0.f
-                                                               blue:0.f
-                                                              alpha:.5f].CGColor);
-    // Set the line width
-    CGContextSetLineWidth(context, 2.0); // Set this to the width you desire
-    // Set the line dash pattern
-    CGContextSetLineDash(context, 0, dashPattern, 2); // 2 is the number of elements in the dashPattern
-    // Create a path for the rectangle
-    CGContextBeginPath(context);
-    CGContextAddRect(context, NSInsetRect(self.bounds, 1, 1)); // Inset the rect so the border is fully visible
-    // Stroke the path
-    CGContextStrokePath(context);
-}
-@end
-
-@implementation CaptureWindow {
-    NSInteger originX;
-    NSInteger originY;
-}
-
-- (id)initWithPositionX:(NSInteger)x andY:(NSInteger)y {
-    originX = x;
-    originY = y;
-    if (self = [super initWithContentRect:NSMakeRect(originX, originY, 0, 0)
-                                styleMask:NSWindowStyleMaskBorderless
-                                  backing:NSBackingStoreBuffered
-                                    defer:NO]) {
-        [self setTitle:NSProcessInfo.processInfo.processName];
-        [self setOpaque:NO];
-        [self setExcludedFromWindowsMenu:NO];
-        [self setBackgroundColor:[NSColor colorWithDeviceRed:0.f
-                                                       green:0.f
-                                                        blue:1.f
-                                                       alpha:.1f]];
-        [self setIgnoresMouseEvents:YES];
-        [self makeKeyAndOrderFront:self];
-        [self setLevel:NSFloatingWindowLevel];
-        [self setCanHide:NO];
-        [self setReleasedWhenClosed:NO];
-        
-        _dashedBorderView = nil;
-    }
-    return self;
-}
-
-- (void)resizeWithMousePositionX:(NSInteger)x andY:(NSInteger)y {
-    if (_dashedBorderView)
-        return;
-    NSInteger newX = x - originX;
-    NSInteger newY = y - originY;
-    NSInteger offsetX = 0;
-    NSInteger offsetY = 0;
-    if (newX < 0)
-        offsetX = labs(newX);
-    if (newY < 0)
-        offsetY = labs(newY);
-    [self setFrame:NSMakeRect(originX - offsetX,
-                              originY - offsetY,
-                              labs(newX),
-                              labs(newY))
-           display:NO];
-}
-
-- (void)finalPosition:(NSInteger)x andY:(NSInteger)y {
-    [self setBackgroundColor:[NSColor colorWithDeviceRed:1.f
-                                                   green:0.f
-                                                    blue:0.f
-                                                   alpha:.05f]];
-    [self resizeWithMousePositionX:x andY:y];
-    _dashedBorderView = [[DashedBorderView alloc] initWithFrame:[self frame]];
-    [self setContentView:_dashedBorderView];
-}
-@end
+State state;
+Settings settings;
 
 @implementation AppDelegate
 - (id)init {
     if (self = [super init]) {
-        _statusBar = nil;
         state.mousePosition = [NSEvent mouseLocation];
         _captureWindow = nil;
     }
@@ -177,15 +52,6 @@ static struct {
                                              selector:@selector(terminate:)
                                                  name:NSApplicationWillTerminateNotification
                                                object:nil];
-    _statusBar = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
-    _statusBar.button.image = [NSImage imageWithSystemSymbolName:@"sparkles"
-                                       accessibilityDescription:nil];
-#if __MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_4
-    statusBar.highlightMode = YES;
-#endif
-    NSMenu *menu = [[NSMenu alloc] init];
-    [menu addItemWithTitle:@"Quit" action:@selector(terminate:) keyEquivalent:@"q"];
-    _statusBar.menu = menu;
 }
 @end
 
