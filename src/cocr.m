@@ -53,7 +53,9 @@ Settings settings;
     NSRect frame = [_captureWindow frame];
     LOGF(@"* CAPTURING AT: x:%f, y:%f, w:%f, h:%f", frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
     _screenCapture = [[ScreenCapture alloc] initWithFrame:frame];
-    [_screenCapture readText];
+    [_screenCapture readText:^(NSString *result) {
+        LOGF(@"* RESULT \"%@\"", result);
+    }];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
@@ -68,6 +70,8 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
     state.mousePosition = [NSEvent mouseLocation];
     bool lastDraggingState = state.dragging;
     switch (type) {
+        case kCGEventLeftMouseDown:
+            return NULL;
         case kCGEventLeftMouseDragged:
             state.dragging = YES;
             [[state.delegate captureWindow] resizeWithMousePositionX:state.mousePosition.x
@@ -90,7 +94,7 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
                 LOG(@"* DRAGGING FINISHED");
                 NSRect frame = [[state.delegate captureWindow] frame];
                 LOGF(@"FRAME: x:%f, y:%f, w:%f, h:%f", frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
-                break;
+                return NULL;
             }
             break;
         case kCGEventTapDisabledByTimeout:

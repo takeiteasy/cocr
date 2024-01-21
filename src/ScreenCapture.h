@@ -15,7 +15,7 @@
 @property NSRect frame;
 
 -(id)initWithFrame:(NSRect)frame;
--(void)readText;
+-(BOOL)readText:(void(^)(NSString*))completion;
 @end
 
 #endif /* ScreenCapture_h */
