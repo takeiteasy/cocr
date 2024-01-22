@@ -6,14 +6,31 @@
 //
 
 #include "ScreenReader.h"
+#import <CommonCrypto/CommonDigest.h>
+
+@interface NSData (MyAdditions)
+- (NSString *)MD5Hash;
+@end
+
+@implementation NSData (MyAdditions)
+- (NSString *)MD5Hash {
+    unsigned char result[CC_MD5_DIGEST_LENGTH];
+    CC_MD5(self.bytes, (CC_LONG)self.length, result); // This is the md5 call
+    NSMutableString *output = [NSMutableString stringWithCapacity:CC_MD5_DIGEST_LENGTH * 2];
+    for(int i = 0; i < CC_MD5_DIGEST_LENGTH; i++)
+        [output appendFormat:@"%02x", result[i]];
+    return output;
+}
+@end
 
 @implementation ScreenReader {
-    NSString *lastString;
+    NSString *lastHash;
 }
 
 -(id)initWithFrame:(NSRect)frame {
     if (self = [super init]) {
         _frame = frame;
+        lastHash = @"";
     }
     return self;
 }
@@ -28,6 +45,11 @@
     [task launch];
     [task waitUntilExit];
     
+    NSString *hash = [[NSData dataWithContentsOfFile:outPath] MD5Hash];
+    if ([lastHash isEqualTo:hash])
+        return false;
+    
+    lastHash = hash;
     NSImage* nsImg = [[NSImage alloc] initWithContentsOfFile:outPath];
     if (!nsImg) {
         NSLog(@"ERROR: Failed to load image at \"%@\"", outPath);

@@ -84,8 +84,6 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
     state.mousePosition = [NSEvent mouseLocation];
     bool lastDraggingState = state.dragging;
     switch (type) {
-        case kCGEventLeftMouseDown:
-            return NULL;
         case kCGEventLeftMouseDragged:
             state.dragging = YES;
             [[state.delegate captureWindow] resizeWithMousePositionX:state.mousePosition.x
@@ -105,7 +103,6 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
                 CGEventTapEnable(state.tap, 0);
                 state.tap = nil;
-                NSRect frame = [[state.delegate captureWindow] frame];
                 return NULL;
             }
             break;
@@ -128,7 +125,7 @@ static void usage(void) {
     puts("usage: cocr [options]");
     puts("");
     puts("  Description:");
-    puts("    General purpose CLI OCR for Mac");
+    puts("    A general purpose CLI on-screen OCR for Mac");
     puts("");
     puts("  Arguments:");
     puts("    * --help/-h -- Display this message");
