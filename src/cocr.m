@@ -33,17 +33,12 @@
 #import <CoreImage/CoreImage.h>
 #import <CommonCrypto/CommonDigest.h>
 
-#if defined(DEBUG)
 #define LOGF(MSG, ...)              \
 do {                                \
     if (settings.enableVerboseMode) \
         NSLog((MSG), __VA_ARGS__);  \
 } while(0)
 #define LOG(MSG) LOGF(@"%@", (MSG))
-#else
-#define LOGF(MSG, ...)
-#define LOG(MSG)
-#endif
 
 @interface DashedBorderView : NSView
 @end
@@ -64,11 +59,12 @@ do {                                \
 @interface AppDelegate : NSObject <NSApplicationDelegate> {
     NSTimer *refreshTimer;
 }
-
+@property (nonatomic, strong) NSStatusItem *statusBar;
 @property (nonatomic, strong) SelectWindow *captureWindow;
 @property (nonatomic, strong) ScreenReader *screenReader;
 - (id)init;
 - (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y;
+- (void)createStatusBar;
 @end
 
 typedef struct {
@@ -296,6 +292,18 @@ static Settings settings;
                                                  name:NSApplicationWillTerminateNotification
                                                object:nil];
 }
+
+- (void)createStatusBar {
+    _statusBar = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
+    _statusBar.button.image = [NSImage imageWithSystemSymbolName:@"sparkles"
+                                        accessibilityDescription:nil];
+#if __MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_4
+    statusBar.highlightMode = YES;
+#endif
+    NSMenu *menu = [[NSMenu alloc] init];
+    [menu addItemWithTitle:@"Quit" action:@selector(terminate:) keyEquivalent:@"q"];
+    _statusBar.menu = menu;
+}
 @end
 
 static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *ref) {
@@ -334,6 +342,7 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
                     [[state.delegate captureWindow] setFrame:frame
                                                      display:YES
                                                      animate:YES];
+                    [state.delegate createStatusBar];
                 }
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
                 CGEventTapEnable(state.tap, 0);
@@ -373,7 +382,7 @@ int main(int argc, char *argv[]) {
     extern int optind;
     extern char* optarg;
     extern int optopt;
-    while ((opt = getopt_long(argc, argv, "h", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hv", long_options, NULL)) != -1) {
         switch (opt) {
             case 'v':
                 settings.enableVerboseMode = YES;
