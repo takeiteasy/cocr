@@ -77,8 +77,15 @@ typedef struct {
 
 typedef struct {
     BOOL enableVerboseMode;
+    BOOL disableOverlay;
+    BOOL disableBorder;
+    BOOL disableStatusBar;
+    BOOL disableMD5Check;
+    BOOL outputToClipboard;
     BOOL keepAlive;
     NSTimeInterval refreshInterval;
+    NSColor *backgroundColor;
+    NSRect frame;
 } Settings;
 
 static State state;
@@ -373,17 +380,87 @@ static void usage(void) {
     puts("    A general purpose CLI on-screen OCR for Mac");
     puts("");
     puts("  Arguments:");
+    puts("    * --disable-overlay/-o -- Disable capture overlay");
+    puts("    * --color/-c -- Background color for capture overlay (Hex or RGBA)");
+    puts("    * --disable-border/-b -- Disable border on capture overlay");
+    puts("    * --frame/-f -- Capture frame (x,y,w,h)");
+    puts("    * --keep-alive/-k -- Capture periodically, see -i");
+    puts("    * --interval/-i -- Capture timer interval (default: 1 second)");
+    puts("    * --fullscreen/-F -- Set capture frame to screen size");
+    puts("    * --disable-statusbar/-s -- Disable status bar icon to quit app");
+    puts("    * --disable-md5check/-m -- Disable MD5 duplicate check");
+    puts("    * --clipboard/-p -- Output OCR result to clipboard instead of STDOUT");
     puts("    * --verbose/-v -- Enable logging");
     puts("    * --help/-h -- Display this message");
 }
 
 int main(int argc, char *argv[]) {
+    memset((void*)&state, 0, sizeof(State));
+    memset((void*)&settings, 0, sizeof(Settings));
+    settings.refreshInterval = 1.f;
+    settings.backgroundColor = [NSColor colorWithRed:0.f
+                                               green:0.f
+                                                blue:1.f
+                                               alpha:.1f];
+    settings.frame = NSMakeRect(0.f, 0.f, 0.f, 0.f);
+    
     int opt;
     extern int optind;
     extern char* optarg;
     extern int optopt;
-    while ((opt = getopt_long(argc, argv, "hv", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hvobkFsmpc:f:i:", long_options, NULL)) != -1) {
         switch (opt) {
+            case 'o':
+                settings.disableOverlay = YES;
+                break;
+            case 'c':
+#define SetWindowColor(R, G, B, A)                                          \
+        settings.backgroundColor = [NSColor colorWithRed:(float)(R) / 255.f \
+                                                   green:(float)(G) / 255.f \
+                                                    blue:(float)(B) / 255.f \
+                                                   alpha:(float)(A) / 255.f];
+                if (optarg[0] == '#') {
+                    int _r, _g, _b, _a;
+                    sscanf(optarg, "%02x%02x%02x%02x", &_r, &_g, &_b, &_a);
+                    SetWindowColor(_r, _g, _b, _a);
+                } else if (!strncmp(optarg, "rgb", 3)) {
+                    int _r, _g, _b, _a;
+                    sscanf(optarg, "rgb(%d,%d,%d,%d)", &_r, &_g, &_b, &_a);
+                    SetWindowColor(_r, _g, _b, _a);
+                } else {
+                    NSLog(@"ERROR: Invalid color format\n");
+                    usage();
+                    return 6;
+                }
+                break;
+            case 'b':
+                settings.disableBorder = YES;
+                break;
+            case 'f': {
+                int _x, _y, _w, _h;
+                sscanf(optarg, "%02x,%02x,%02x,%02x", &_x, &_y, &_w, &_h);
+                settings.frame = NSMakeRect((float)_x, (float)_y, (float)_w, (float)_h);
+                break;
+            }
+            case 'k':
+                settings.keepAlive = YES;
+                break;
+            case 'i':
+                if (!(settings.refreshInterval = atoi(optarg)))
+                    settings.refreshInterval = 1.f;
+                break;
+            case 'F':
+                settings.frame = [[NSScreen mainScreen] frame];
+                break;
+            case 's':
+                settings.disableStatusBar = YES;
+                break;
+            case 'm':
+                settings.disableMD5Check = YES;
+                break;
+            case 'p':
+                settings.outputToClipboard = YES;
+                break;
             case 'v':
                 settings.enableVerboseMode = YES;
                 break;
@@ -396,10 +473,6 @@ int main(int argc, char *argv[]) {
                 return 3;
         }
     }
-    
-    settings.keepAlive = YES;
-    settings.refreshInterval = 1.f;
-    state.dragging = NO;
     
     assert((state.tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, 0, kCGEventMaskForAllEvents, EventCallback, NULL)));
     state.tapLoop = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, state.tap, 0);
