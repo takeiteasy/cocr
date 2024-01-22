@@ -9,23 +9,16 @@
 #define cocr_h
 #include <Cocoa/Cocoa.h>
 #include "SelectWindow.h"
-#include "ScreenCapture.h"
+#include "ScreenReader.h"
+#include "TextWindow.h"
 
-#if defined(DEBUG)
-#define LOGF(MSG, ...)              \
-do {                                \
-    if (settings.enableVerboseMode) \
-        NSLog((MSG), __VA_ARGS__);  \
-} while(0)
-#define LOG(MSG) LOGF(@"%@", (MSG))
-#else
-#define LOGF(MSG, ...)
-#define LOG(MSG)
-#endif
+@interface AppDelegate : NSObject <NSApplicationDelegate> {
+    NSTimer *refreshTimer;
+}
 
-@interface AppDelegate : NSObject <NSApplicationDelegate>
 @property (nonatomic, strong) SelectWindow *captureWindow;
-@property (nonatomic, strong) ScreenCapture *screenCapture;
+@property (nonatomic, strong) ScreenReader *screenReader;
+@property (nonatomic, strong) TextWindow *subtitleWindow;
 - (id)init;
 - (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y;
 @end
@@ -39,7 +32,8 @@ typedef struct {
 } State;
 
 typedef struct {
-    BOOL enableVerboseMode;
+    BOOL keepAlive;
+    NSTimeInterval refreshInterval;
 } Settings;
 
 extern State state;

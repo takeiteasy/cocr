@@ -38,24 +38,38 @@ Settings settings;
     if (self = [super init]) {
         state.mousePosition = [NSEvent mouseLocation];
         _captureWindow = nil;
-        _screenCapture = nil;
+        _screenReader = nil;
+        _subtitleWindow = nil;
+        refreshTimer = nil;
     }
     return self;
 }
 
-- (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y {
-    LOGF(@"* WINDOW CREATED AT: %ld, %ld", x, y);
-    _captureWindow = [[SelectWindow alloc] initWithPositionX:x
-                                                         andY:y];
+- (void)timerRefresh {
+    [_screenReader readText:^(NSString *result) {
+        printf("%s\n", [result UTF8String]);
+        if (!settings.keepAlive)
+            [NSApp terminate:nil];
+    }];
 }
 
-- (void)initScreenCapture {
+- (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y {
+    _captureWindow = [[SelectWindow alloc] initWithPositionX:x
+                                                        andY:y];
+    _subtitleWindow = [TextWindow new];
+}
+
+- (void)initScreenReader {
     NSRect frame = [_captureWindow frame];
-    LOGF(@"* CAPTURING AT: x:%f, y:%f, w:%f, h:%f", frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
-    _screenCapture = [[ScreenCapture alloc] initWithFrame:frame];
-    [_screenCapture readText:^(NSString *result) {
-        LOGF(@"* RESULT \"%@\"", result);
-    }];
+    _screenReader = [[ScreenReader alloc] initWithFrame:frame];
+    if (!settings.keepAlive)
+        [self timerRefresh];
+    else
+        refreshTimer = [NSTimer scheduledTimerWithTimeInterval:settings.refreshInterval
+                                                        target:self
+                                                      selector:@selector(timerRefresh)
+                                                      userInfo:nil
+                                                       repeats:YES];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
@@ -77,7 +91,6 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
             [[state.delegate captureWindow] resizeWithMousePositionX:state.mousePosition.x
                                                                 andY:state.mousePosition.y];
             if (!lastDraggingState) {
-                LOG(@"* DRAGGING STARTED");
                 [state.delegate newWindowAtX:state.mousePosition.x
                                         andY:state.mousePosition.y];
                 return NULL;
@@ -86,14 +99,13 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
         case kCGEventLeftMouseUp:
             if (state.dragging) {
                 [[state.delegate captureWindow] finalPosition:state.mousePosition.x
-                                                         andY:state.mousePosition.y];
-                [state.delegate initScreenCapture];
+                                                         andY:state.mousePosition.y
+                                                  andKeepOpen:settings.keepAlive];
+                [state.delegate initScreenReader];
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
                 CGEventTapEnable(state.tap, 0);
                 state.tap = nil;
-                LOG(@"* DRAGGING FINISHED");
                 NSRect frame = [[state.delegate captureWindow] frame];
-                LOGF(@"FRAME: x:%f, y:%f, w:%f, h:%f", frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
                 return NULL;
             }
             break;
@@ -113,13 +125,12 @@ static struct option long_options[] = {
 };
 
 static void usage(void) {
-    puts("usage: ocr [options]");
+    puts("usage: cocr [options]");
     puts("");
     puts("  Description:");
-    puts("    TODO");
+    puts("    General purpose CLI OCR for Mac");
     puts("");
     puts("  Arguments:");
-    puts("    * --verbose/-v -- Enable logging");
     puts("    * --help/-h -- Display this message");
 }
 
@@ -128,10 +139,8 @@ int main(int argc, char *argv[]) {
     extern int optind;
     extern char* optarg;
     extern int optopt;
-    while ((opt = getopt_long(argc, argv, "hv", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "h", long_options, NULL)) != -1) {
         switch (opt) {
-            case 'v':
-                settings.enableVerboseMode = YES;
                 break;
             case 'h':
                 usage();
@@ -143,17 +152,17 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    settings.enableVerboseMode = YES;
+    settings.keepAlive = YES;
+    settings.refreshInterval = 1.f;
     state.dragging = NO;
+    
     assert((state.tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, 0, kCGEventMaskForAllEvents, EventCallback, NULL)));
-    LOG(@"* EVENT TAP ENABLE");
     state.tapLoop = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, state.tap, 0);
     CGEventTapEnable(state.tap, 1);
     CFRunLoopAddSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
     
     @autoreleasepool {
         state.delegate = [AppDelegate new];
-        LOG(@"* APP DELEGATE CREATED");
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
         [NSApp setDelegate:state.delegate];

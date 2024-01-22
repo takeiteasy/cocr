@@ -1,13 +1,13 @@
 //
-//  ScreenCapture.m
+//  ScreenReader.m
 //  ocr
 //
 //  Created by George Watson on 21/01/2024.
 //
 
-#include "ScreenCapture.h"
+#include "ScreenReader.h"
 
-@implementation ScreenCapture {
+@implementation ScreenReader {
     NSString *lastString;
 }
 
@@ -24,7 +24,7 @@
     NSTask *task = [NSTask new];
     [task setLaunchPath:@"/usr/sbin/screencapture"];
     int y = [[[NSScreen screens] objectAtIndex:0] frame].size.height - _frame.size.height - (int)_frame.origin.y;
-    [task setArguments:@[@"-r", @"-R", [NSString stringWithFormat:@"%d,%d,%d,%d", (int)_frame.origin.x, y, (int)_frame.size.width, (int)_frame.size.height], outPath]];
+    [task setArguments:@[@"-r", @"-x", @"-R", [NSString stringWithFormat:@"%d,%d,%d,%d", (int)_frame.origin.x, y, (int)_frame.size.width, (int)_frame.size.height], outPath]];
     [task launch];
     [task waitUntilExit];
     
@@ -69,7 +69,6 @@
     BOOL result = !!error;
     if (result)
         NSLog(@"Unable to perform the requests: %@", error.localizedDescription);
-    CGImageRelease(img);
     return result;
 }
 @end

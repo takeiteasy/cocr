@@ -55,14 +55,13 @@
         [self setCanHide:NO];
         [self setReleasedWhenClosed:NO];
         
-        _dashedBorderView = nil;
+        _dashedBorderView = [[DashedBorderView alloc] initWithFrame:[self frame]];
+        [self setContentView:_dashedBorderView];
     }
     return self;
 }
 
 - (void)resizeWithMousePositionX:(NSInteger)x andY:(NSInteger)y {
-    if (_dashedBorderView)
-        return;
     NSInteger newX = x - originX;
     NSInteger newY = y - originY;
     NSInteger offsetX = 0;
@@ -78,13 +77,9 @@
            display:NO];
 }
 
-- (void)finalPosition:(NSInteger)x andY:(NSInteger)y {
-    [self setBackgroundColor:[NSColor colorWithDeviceRed:1.f
-                                                   green:0.f
-                                                    blue:0.f
-                                                   alpha:.05f]];
+- (void)finalPosition:(NSInteger)x andY:(NSInteger)y andKeepOpen:(BOOL)keepOpen {
     [self resizeWithMousePositionX:x andY:y];
-    _dashedBorderView = [[DashedBorderView alloc] initWithFrame:[self frame]];
-    [self setContentView:_dashedBorderView];
+    if (!keepOpen)
+        [self close];
 }
 @end
