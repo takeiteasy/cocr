@@ -1,4 +1,4 @@
-/* cocr -- General purpose on-screen OCR for Mac [https://github.com/takeiteasy/cocr]
+/* cocr.m -- General purpose on-screen OCR for Mac [https://github.com/takeiteasy/cocr]
  
  The MIT License (MIT)
 
@@ -23,15 +23,234 @@
  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include "cocr.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <Carbon/Carbon.h>
 #include <getopt.h>
+#import <Cocoa/Cocoa.h>
+#import <Vision/Vision.h>
+#import <CoreImage/CoreImage.h>
+#import <CommonCrypto/CommonDigest.h>
 
-State state;
-Settings settings;
+#if defined(DEBUG)
+#define LOGF(MSG, ...)              \
+do {                                \
+    if (settings.enableVerboseMode) \
+        NSLog((MSG), __VA_ARGS__);  \
+} while(0)
+#define LOG(MSG) LOGF(@"%@", (MSG))
+#else
+#define LOGF(MSG, ...)
+#define LOG(MSG)
+#endif
+
+@interface DashedBorderView : NSView
+@end
+
+@interface SelectWindow : NSWindow
+@property (nonatomic, strong) DashedBorderView *dashedBorderView;
+-(id)initWithPositionX:(NSInteger)x andY:(NSInteger)y;
+-(void)resizeWithMousePositionX:(NSInteger)x andY:(NSInteger)y;
+@end
+
+@interface ScreenReader : NSObject
+@property NSRect frame;
+
+-(id)initWithFrame:(NSRect)frame;
+-(BOOL)readText:(void(^)(NSString*))completion;
+@end
+
+@interface AppDelegate : NSObject <NSApplicationDelegate> {
+    NSTimer *refreshTimer;
+}
+
+@property (nonatomic, strong) SelectWindow *captureWindow;
+@property (nonatomic, strong) ScreenReader *screenReader;
+- (id)init;
+- (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y;
+@end
+
+typedef struct {
+    CFMachPortRef tap;
+    CFRunLoopSourceRef tapLoop;
+    AppDelegate *delegate;
+    NSPoint mousePosition;
+    BOOL dragging;
+} State;
+
+typedef struct {
+    BOOL enableVerboseMode;
+    BOOL keepAlive;
+    NSTimeInterval refreshInterval;
+} Settings;
+
+static State state;
+static Settings settings;
+
+@implementation DashedBorderView
+- (void)drawRect:(NSRect)dirtyRect {
+    [super drawRect:dirtyRect];
+    // dash customization parameters
+    CGFloat dashPattern[] = {10, 6}; // 10 units on, 6 units off, for example
+    CGContextRef context = [[NSGraphicsContext currentContext] CGContext];
+    // Set the line color
+    CGContextSetStrokeColorWithColor(context, [NSColor colorWithRed:0.f
+                                                              green:0.f
+                                                               blue:0.f
+                                                              alpha:.5f].CGColor);
+    // Set the line width
+    CGContextSetLineWidth(context, 2.0); // Set this to the width you desire
+    // Set the line dash pattern
+    CGContextSetLineDash(context, 0, dashPattern, 2); // 2 is the number of elements in the dashPattern
+    // Create a path for the rectangle
+    CGContextBeginPath(context);
+    CGContextAddRect(context, NSInsetRect(self.bounds, 1, 1)); // Inset the rect so the border is fully visible
+    // Stroke the path
+    CGContextStrokePath(context);
+}
+@end
+
+@implementation SelectWindow {
+    NSInteger originX;
+    NSInteger originY;
+    NSInteger width;
+    NSInteger height;
+}
+
+- (id)initWithPositionX:(NSInteger)x andY:(NSInteger)y {
+    originX = x;
+    originY = y;
+    width = 0;
+    height = 0;
+    if (self = [super initWithContentRect:NSMakeRect(originX, originY, 0, 0)
+                                styleMask:NSWindowStyleMaskBorderless
+                                  backing:NSBackingStoreBuffered
+                                    defer:NO]) {
+        [self setTitle:NSProcessInfo.processInfo.processName];
+        [self setOpaque:NO];
+        [self setExcludedFromWindowsMenu:NO];
+        [self setBackgroundColor:[NSColor colorWithDeviceRed:0.f
+                                                       green:0.f
+                                                        blue:1.f
+                                                       alpha:.1f]];
+        [self setIgnoresMouseEvents:YES];
+        [self makeKeyAndOrderFront:self];
+        [self setLevel:NSFloatingWindowLevel];
+        [self setCanHide:NO];
+        [self setReleasedWhenClosed:NO];
+        
+        _dashedBorderView = [[DashedBorderView alloc] initWithFrame:[self frame]];
+        [self setContentView:_dashedBorderView];
+    }
+    return self;
+}
+
+- (void)resizeWithMousePositionX:(NSInteger)x andY:(NSInteger)y {
+    width = x - originX;
+    height = y - originY;
+    NSInteger offsetX = 0;
+    NSInteger offsetY = 0;
+    if (width < 0)
+        offsetX = labs(width);
+    if (height < 0)
+        offsetY = labs(height);
+    [self setFrame:NSMakeRect(originX - offsetX,
+                              originY - offsetY,
+                              labs(width),
+                              labs(height))
+           display:NO];
+}
+@end
+
+@interface NSData (MyAdditions)
+- (NSString *)MD5Hash;
+@end
+
+@implementation NSData (MyAdditions)
+- (NSString *)MD5Hash {
+    unsigned char result[CC_MD5_DIGEST_LENGTH];
+    CC_MD5(self.bytes, (CC_LONG)self.length, result); // This is the md5 call
+    NSMutableString *output = [NSMutableString stringWithCapacity:CC_MD5_DIGEST_LENGTH * 2];
+    for(int i = 0; i < CC_MD5_DIGEST_LENGTH; i++)
+        [output appendFormat:@"%02x", result[i]];
+    return output;
+}
+@end
+
+@implementation ScreenReader {
+    NSString *lastHash;
+}
+
+-(id)initWithFrame:(NSRect)frame {
+    if (self = [super init]) {
+        _frame = frame;
+        lastHash = @"";
+    }
+    return self;
+}
+
+- (BOOL)readText:(void(^)(NSString *finished))completion {
+    NSString *outPath = [NSString stringWithFormat:@"/tmp/cocr_%@.png", [[NSUUID UUID] UUIDString]];
+    
+    NSTask *task = [NSTask new];
+    [task setLaunchPath:@"/usr/sbin/screencapture"];
+    int y = [[[NSScreen screens] objectAtIndex:0] frame].size.height - _frame.size.height - (int)_frame.origin.y;
+    if (_frame.size.width == 0 || _frame.size.height == 0)
+        [NSApp terminate:nil];
+    [task setArguments:@[@"-r", @"-x", @"-R", [NSString stringWithFormat:@"%d,%d,%d,%d", (int)_frame.origin.x, y, (int)_frame.size.width, (int)_frame.size.height], outPath]];
+    [task launch];
+    [task waitUntilExit];
+    
+    NSString *hash = [[NSData dataWithContentsOfFile:outPath] MD5Hash];
+    if ([lastHash isEqualTo:hash])
+        return false;
+    
+    lastHash = hash;
+    NSImage* nsImg = [[NSImage alloc] initWithContentsOfFile:outPath];
+    if (!nsImg) {
+        NSLog(@"ERROR: Failed to load image at \"%@\"", outPath);
+        return NO;
+    }
+    NSRect imageRect = NSMakeRect(0, 0, nsImg.size.width, nsImg.size.height);
+    CGImageRef img = [nsImg CGImageForProposedRect:&imageRect
+                                           context:NULL
+                                             hints:nil];
+    if (!img) {
+        NSLog(@"ERROR: Failed to load image at \"%@\"", outPath);
+        return NO;
+    }
+    VNImageRequestHandler *requestHandler = [[VNImageRequestHandler alloc] initWithCGImage:img options:@{}];
+    
+    NSArray<NSString*> *languages = @[@"en-US"];
+    VNRecognizeTextRequest *request = [[VNRecognizeTextRequest alloc] initWithCompletionHandler:^(VNRequest * _Nonnull request, NSError * _Nullable error) {
+        if (error) {
+            NSLog(@"ERROR: %@", error.localizedDescription);
+            return;
+        }
+        
+        NSArray *observations = [request results];
+        NSMutableArray<NSString*> *recognizedStrings = [[NSMutableArray alloc] init];
+        
+        for (VNRecognizedTextObservation *observation in observations) {
+            VNRecognizedText *topCandidate = [[observation topCandidates:1] firstObject];
+            if (topCandidate)
+                [recognizedStrings addObject:topCandidate.string];
+        }
+        
+        completion([recognizedStrings componentsJoinedByString:@", "]);
+    }];
+    request.recognitionLanguages = languages;
+    
+    NSError *error = nil;
+    [requestHandler performRequests:@[request]
+                              error:&error];
+    BOOL result = !!error;
+    if (result)
+        NSLog(@"Unable to perform the requests: %@", error.localizedDescription);
+    return result;
+}
+@end
 
 @implementation AppDelegate
 - (id)init {
@@ -59,6 +278,7 @@ Settings settings;
 
 - (void)initScreenReader {
     NSRect frame = [_captureWindow frame];
+    LOGF(@"* CAPTURING AT: x:%f, y:%f, w:%f, h:%f", frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
     _screenReader = [[ScreenReader alloc] initWithFrame:frame];
     if (!settings.keepAlive)
         [self timerRefresh];
@@ -82,8 +302,13 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
     state.mousePosition = [NSEvent mouseLocation];
     bool lastDraggingState = state.dragging;
     switch (type) {
+        case kCGEventKeyDown:
+            if (CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == kVK_Escape)
+                [NSApp terminate:nil];
+            break;
         case kCGEventLeftMouseDragged:
             state.dragging = YES;
+            LOG(@"* DRAGGING STARTED");
             [[state.delegate captureWindow] resizeWithMousePositionX:state.mousePosition.x
                                                                 andY:state.mousePosition.y];
             if (!lastDraggingState) {
@@ -94,6 +319,7 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
             break;
         case kCGEventLeftMouseUp:
             if (state.dragging) {
+                LOG(@"* DRAGGING FINISHED");
                 [[state.delegate captureWindow] resizeWithMousePositionX:state.mousePosition.x
                                                                     andY:state.mousePosition.y];
                 [state.delegate initScreenReader];
@@ -138,6 +364,7 @@ static void usage(void) {
     puts("    A general purpose CLI on-screen OCR for Mac");
     puts("");
     puts("  Arguments:");
+    puts("    * --verbose/-v -- Enable logging");
     puts("    * --help/-h -- Display this message");
 }
 
@@ -148,6 +375,8 @@ int main(int argc, char *argv[]) {
     extern int optopt;
     while ((opt = getopt_long(argc, argv, "h", long_options, NULL)) != -1) {
         switch (opt) {
+            case 'v':
+                settings.enableVerboseMode = YES;
                 break;
             case 'h':
                 usage();
@@ -170,6 +399,7 @@ int main(int argc, char *argv[]) {
     
     @autoreleasepool {
         state.delegate = [AppDelegate new];
+        LOG(@"* APP DELEGATE CREATED");
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
         [NSApp setDelegate:state.delegate];
