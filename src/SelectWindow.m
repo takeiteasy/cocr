@@ -33,11 +33,15 @@
 @implementation SelectWindow {
     NSInteger originX;
     NSInteger originY;
+    NSInteger width;
+    NSInteger height;
 }
 
 - (id)initWithPositionX:(NSInteger)x andY:(NSInteger)y {
     originX = x;
     originY = y;
+    width = 0;
+    height = 0;
     if (self = [super initWithContentRect:NSMakeRect(originX, originY, 0, 0)
                                 styleMask:NSWindowStyleMaskBorderless
                                   backing:NSBackingStoreBuffered
@@ -62,24 +66,18 @@
 }
 
 - (void)resizeWithMousePositionX:(NSInteger)x andY:(NSInteger)y {
-    NSInteger newX = x - originX;
-    NSInteger newY = y - originY;
+    width = x - originX;
+    height = y - originY;
     NSInteger offsetX = 0;
     NSInteger offsetY = 0;
-    if (newX < 0)
-        offsetX = labs(newX);
-    if (newY < 0)
-        offsetY = labs(newY);
+    if (width < 0)
+        offsetX = labs(width);
+    if (height < 0)
+        offsetY = labs(height);
     [self setFrame:NSMakeRect(originX - offsetX,
                               originY - offsetY,
-                              labs(newX),
-                              labs(newY))
+                              labs(width),
+                              labs(height))
            display:NO];
-}
-
-- (void)finalPosition:(NSInteger)x andY:(NSInteger)y andKeepOpen:(BOOL)keepOpen {
-    [self resizeWithMousePositionX:x andY:y];
-    if (!keepOpen)
-        [self close];
 }
 @end

@@ -94,15 +94,27 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
             break;
         case kCGEventLeftMouseUp:
             if (state.dragging) {
-                [[state.delegate captureWindow] finalPosition:state.mousePosition.x
-                                                         andY:state.mousePosition.y
-                                                  andKeepOpen:settings.keepAlive];
+                [[state.delegate captureWindow] resizeWithMousePositionX:state.mousePosition.x
+                                                                    andY:state.mousePosition.y];
                 [state.delegate initScreenReader];
+                if (!settings.keepAlive)
+                    [[state.delegate captureWindow] close];
+                else {
+                    NSRect frame = [[state.delegate captureWindow] frame];
+                    frame.size.width += 4;
+                    frame.size.height += 4;
+                    frame.origin.x -= 2;
+                    frame.origin.y -= 2;
+                    [[state.delegate captureWindow] setFrame:frame
+                                                     display:YES
+                                                     animate:YES];
+                }
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
                 CGEventTapEnable(state.tap, 0);
                 state.tap = nil;
                 return NULL;
-            }
+            } else
+                [NSApp terminate:nil];
             break;
         case kCGEventTapDisabledByTimeout:
         case kCGEventTapDisabledByUserInput:

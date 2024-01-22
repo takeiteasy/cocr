@@ -16,7 +16,6 @@
 @property (nonatomic, strong) DashedBorderView *dashedBorderView;
 -(id)initWithPositionX:(NSInteger)x andY:(NSInteger)y;
 -(void)resizeWithMousePositionX:(NSInteger)x andY:(NSInteger)y;
--(void)finalPosition:(NSInteger)x andY:(NSInteger)y andKeepOpen:(BOOL)keepOpen;
 @end
 
 #endif /* SelectWindow_h */

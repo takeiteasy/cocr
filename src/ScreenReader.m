@@ -41,6 +41,8 @@
     NSTask *task = [NSTask new];
     [task setLaunchPath:@"/usr/sbin/screencapture"];
     int y = [[[NSScreen screens] objectAtIndex:0] frame].size.height - _frame.size.height - (int)_frame.origin.y;
+    if (_frame.size.width == 0 || _frame.size.height == 0)
+        [NSApp terminate:nil];
     [task setArguments:@[@"-r", @"-x", @"-R", [NSString stringWithFormat:@"%d,%d,%d,%d", (int)_frame.origin.x, y, (int)_frame.size.width, (int)_frame.size.height], outPath]];
     [task launch];
     [task waitUntilExit];
