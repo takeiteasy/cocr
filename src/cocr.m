@@ -56,9 +56,7 @@ do {                                \
 -(BOOL)readText:(void(^)(NSString*))completion;
 @end
 
-@interface AppDelegate : NSObject <NSApplicationDelegate> {
-    NSTimer *refreshTimer;
-}
+@interface AppDelegate : NSObject <NSApplicationDelegate>
 @property (nonatomic, strong) NSStatusItem *statusBar;
 @property (nonatomic, strong) SelectWindow *captureWindow;
 @property (nonatomic, strong) ScreenReader *screenReader;
@@ -143,8 +141,10 @@ static Settings settings;
         [self setCanHide:NO];
         [self setReleasedWhenClosed:NO];
         
-        _dashedBorderView = [[DashedBorderView alloc] initWithFrame:[self frame]];
-        [self setContentView:_dashedBorderView];
+        if (!settings.disableBorder) {
+            _dashedBorderView = [[DashedBorderView alloc] initWithFrame:[self frame]];
+            [self setContentView:_dashedBorderView];
+        }
     }
     return self;
 }
@@ -205,11 +205,13 @@ static Settings settings;
     [task launch];
     [task waitUntilExit];
     
-    NSString *hash = [[NSData dataWithContentsOfFile:outPath] MD5Hash];
-    if ([lastHash isEqualTo:hash])
-        return false;
-    
-    lastHash = hash;
+    if (!settings.disableMD5Check) {
+        NSString *hash = [[NSData dataWithContentsOfFile:outPath] MD5Hash];
+        if ([lastHash isEqualTo:hash])
+            return false;
+        
+        lastHash = hash;
+    }
     NSImage* nsImg = [[NSImage alloc] initWithContentsOfFile:outPath];
     if (!nsImg) {
         NSLog(@"ERROR: Failed to load image at \"%@\"", outPath);
@@ -255,7 +257,10 @@ static Settings settings;
 }
 @end
 
-@implementation AppDelegate
+@implementation AppDelegate {
+    NSTimer *refreshTimer;
+}
+
 - (id)init {
     if (self = [super init]) {
         state.mousePosition = [NSEvent mouseLocation];
@@ -268,7 +273,11 @@ static Settings settings;
 
 - (void)timerRefresh {
     [_screenReader readText:^(NSString *result) {
-        printf("%s\n", [result UTF8String]);
+        if (settings.outputToClipboard) {
+            // TODO: Set clipboard here
+        } else {
+            printf("%s\n", [result UTF8String]);
+        }
         if (!settings.keepAlive)
             [NSApp terminate:nil];
     }];
@@ -338,7 +347,7 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
                 [[state.delegate captureWindow] resizeWithMousePositionX:state.mousePosition.x
                                                                     andY:state.mousePosition.y];
                 [state.delegate initScreenReader];
-                if (!settings.keepAlive)
+                if (!settings.keepAlive || settings.disableOverlay)
                     [[state.delegate captureWindow] close];
                 else {
                     NSRect frame = [[state.delegate captureWindow] frame];
@@ -349,7 +358,8 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
                     [[state.delegate captureWindow] setFrame:frame
                                                      display:YES
                                                      animate:YES];
-                    [state.delegate createStatusBar];
+                    if (!settings.disableStatusBar)
+                        [state.delegate createStatusBar];
                 }
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
                 CGEventTapEnable(state.tap, 0);
