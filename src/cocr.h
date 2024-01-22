@@ -10,7 +10,6 @@
 #include <Cocoa/Cocoa.h>
 #include "SelectWindow.h"
 #include "ScreenReader.h"
-#include "TextWindow.h"
 
 @interface AppDelegate : NSObject <NSApplicationDelegate> {
     NSTimer *refreshTimer;
@@ -18,7 +17,6 @@
 
 @property (nonatomic, strong) SelectWindow *captureWindow;
 @property (nonatomic, strong) ScreenReader *screenReader;
-@property (nonatomic, strong) TextWindow *subtitleWindow;
 - (id)init;
 - (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y;
 @end

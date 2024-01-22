@@ -39,7 +39,6 @@ Settings settings;
         state.mousePosition = [NSEvent mouseLocation];
         _captureWindow = nil;
         _screenReader = nil;
-        _subtitleWindow = nil;
         refreshTimer = nil;
     }
     return self;
@@ -56,7 +55,6 @@ Settings settings;
 - (void)newWindowAtX:(NSInteger)x andY:(NSInteger)y {
     _captureWindow = [[SelectWindow alloc] initWithPositionX:x
                                                         andY:y];
-    _subtitleWindow = [TextWindow new];
 }
 
 - (void)initScreenReader {
