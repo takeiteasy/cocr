@@ -209,9 +209,9 @@ static Settings settings;
         NSString *hash = [[NSData dataWithContentsOfFile:outPath] MD5Hash];
         if ([lastHash isEqualTo:hash])
             return false;
-        
         lastHash = hash;
     }
+    
     NSImage* nsImg = [[NSImage alloc] initWithContentsOfFile:outPath];
     if (!nsImg) {
         NSLog(@"ERROR: Failed to load image at \"%@\"", outPath);
@@ -274,7 +274,9 @@ static Settings settings;
 - (void)timerRefresh {
     [_screenReader readText:^(NSString *result) {
         if (settings.outputToClipboard) {
-            // TODO: Set clipboard here
+            [[NSPasteboard generalPasteboard] clearContents];
+            [[NSPasteboard generalPasteboard] setString:result
+                                                forType:NSPasteboardTypeString];
         } else {
             printf("%s\n", [result UTF8String]);
         }
@@ -317,7 +319,9 @@ static Settings settings;
     statusBar.highlightMode = YES;
 #endif
     NSMenu *menu = [[NSMenu alloc] init];
-    [menu addItemWithTitle:@"Quit" action:@selector(terminate:) keyEquivalent:@"q"];
+    [menu addItemWithTitle:@"Quit"
+                    action:@selector(terminate:)
+             keyEquivalent:@"q"];
     _statusBar.menu = menu;
 }
 @end
