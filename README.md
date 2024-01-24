@@ -1,4 +1,28 @@
-# cocr 
+# cocr
+
+_cocr_ **[ˈkɒkə]** is a general purpose CLI program using VNRecognizeTextRequest and screencapture to perform on screen OCR. The program is capable on single or periodic capturing, and includes a selection window if no frame is passed.
+
+```
+usage: cocr [options]
+
+  Description:
+    A general purpose CLI on-screen OCR for Mac
+
+  Arguments:
+    * --disable-overlay/-o -- Disable capture overlay
+    * --color/-c -- Background color for capture overlay (Hex or RGBA)
+    * --disable-border/-b -- Disable border on capture overlay
+    * --frame/-f -- Capture frame (x,y,w,h)
+    * --keep-alive/-k -- Capture periodically, see -i
+    * --interval/-i -- Capture timer interval (default: 1 second)
+    * --fullscreen/-F -- Set capture frame to screen size
+    * --disable-statusbar/-s -- Disable status bar icon to quit app
+    * --disable-md5check/-m -- Disable MD5 duplicate check
+    * --clipboard/-p -- Output OCR result to clipboard instead of STDOUT
+    * --language/-l -- Set the target language, default "en-US"
+    * --verbose/-v -- Enable logging
+    * --help/-h -- Display this message
+```
 
 ## LICENSE
 ```

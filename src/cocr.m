@@ -84,6 +84,8 @@ typedef struct {
     NSTimeInterval refreshInterval;
     NSColor *backgroundColor;
     NSRect frame;
+    BOOL frameSet;
+    NSString *languageCode;
 } Settings;
 
 static State state;
@@ -227,7 +229,7 @@ static Settings settings;
     }
     VNImageRequestHandler *requestHandler = [[VNImageRequestHandler alloc] initWithCGImage:img options:@{}];
     
-    NSArray<NSString*> *languages = @[@"en-US"];
+    NSArray<NSString*> *languages = @[settings.languageCode];
     VNRecognizeTextRequest *request = [[VNRecognizeTextRequest alloc] initWithCompletionHandler:^(VNRequest * _Nonnull request, NSError * _Nullable error) {
         if (error) {
             NSLog(@"ERROR: %@", error.localizedDescription);
@@ -243,17 +245,25 @@ static Settings settings;
                 [recognizedStrings addObject:topCandidate.string];
         }
         
-        completion([recognizedStrings componentsJoinedByString:@", "]);
+        for (NSString *string in recognizedStrings)
+            completion(string);
     }];
     request.recognitionLanguages = languages;
     
     NSError *error = nil;
     [requestHandler performRequests:@[request]
                               error:&error];
-    BOOL result = !!error;
-    if (result)
+    if (error) {
         NSLog(@"Unable to perform the requests: %@", error.localizedDescription);
-    return result;
+        return NO;
+    }
+    [[NSFileManager defaultManager] removeItemAtPath:outPath
+                                               error:&error];
+    if (error) {
+        NSLog(@"Unable to delete file: %@", error.localizedDescription);
+        return NO;
+    }
+    return YES;
 }
 @end
 
@@ -264,9 +274,14 @@ static Settings settings;
 - (id)init {
     if (self = [super init]) {
         state.mousePosition = [NSEvent mouseLocation];
-        _captureWindow = nil;
         _screenReader = nil;
         refreshTimer = nil;
+        
+        if (settings.frameSet) {
+            [self initScreenReader:settings.frame];
+            if (!settings.disableStatusBar && settings.keepAlive)
+                [state.delegate createStatusBar];
+        }
     }
     return self;
 }
@@ -290,8 +305,7 @@ static Settings settings;
                                                         andY:y];
 }
 
-- (void)initScreenReader {
-    NSRect frame = [_captureWindow frame];
+- (void)initScreenReader:(NSRect)frame {
     LOGF(@"* CAPTURING AT: x:%f, y:%f, w:%f, h:%f", frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
     _screenReader = [[ScreenReader alloc] initWithFrame:frame];
     if (!settings.keepAlive)
@@ -350,19 +364,22 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
                 LOG(@"* DRAGGING FINISHED");
                 [[state.delegate captureWindow] resizeWithMousePositionX:state.mousePosition.x
                                                                     andY:state.mousePosition.y];
-                [state.delegate initScreenReader];
+                [state.delegate initScreenReader:[[state.delegate captureWindow] frame]];
                 if (!settings.keepAlive || settings.disableOverlay)
                     [[state.delegate captureWindow] close];
                 else {
-                    NSRect frame = [[state.delegate captureWindow] frame];
-                    frame.size.width += 4;
-                    frame.size.height += 4;
-                    frame.origin.x -= 2;
-                    frame.origin.y -= 2;
-                    [[state.delegate captureWindow] setFrame:frame
-                                                     display:YES
-                                                     animate:YES];
-                    if (!settings.disableStatusBar)
+                    if (!settings.disableBorder) {
+                        NSRect frame = [[state.delegate captureWindow] frame];
+                        frame.size.width += 4;
+                        frame.size.height += 4;
+                        frame.origin.x -= 2;
+                        frame.origin.y -= 2;
+                        [[state.delegate captureWindow] setFrame:frame
+                                                         display:YES
+                                                         animate:YES];
+                    }
+                    
+                    if (!settings.disableStatusBar && settings.keepAlive)
                         [state.delegate createStatusBar];
                 }
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
@@ -382,6 +399,17 @@ static CGEventRef EventCallback(CGEventTapProxy proxy, CGEventType type, CGEvent
 }
 
 static struct option long_options[] = {
+    {"disable-overlay", no_argument, NULL, 'o'},
+    {"color", required_argument, NULL, 'c'},
+    {"disable-border", no_argument, NULL, 'b'},
+    {"frame", required_argument, NULL, 'f'},
+    {"keep-alive", no_argument, NULL, 'k'},
+    {"interval", required_argument, NULL, 'i'},
+    {"fullscreen", no_argument, NULL, 'F'},
+    {"disable-statusbar", no_argument, NULL, 's'},
+    {"disable-md5check", no_argument, NULL, 'm'},
+    {"clipboard", no_argument, NULL, 'p'},
+    {"language", required_argument, NULL, 'l'},
     {"verbose", no_argument, NULL, 'v'},
     {"help", no_argument, NULL, 'h'},
     {NULL, 0, NULL, 0}
@@ -404,6 +432,7 @@ static void usage(void) {
     puts("    * --disable-statusbar/-s -- Disable status bar icon to quit app");
     puts("    * --disable-md5check/-m -- Disable MD5 duplicate check");
     puts("    * --clipboard/-p -- Output OCR result to clipboard instead of STDOUT");
+    puts("    * --language/-l -- Set the target language, default \"en-US\"");
     puts("    * --verbose/-v -- Enable logging");
     puts("    * --help/-h -- Display this message");
 }
@@ -417,12 +446,13 @@ int main(int argc, char *argv[]) {
                                                 blue:1.f
                                                alpha:.1f];
     settings.frame = NSMakeRect(0.f, 0.f, 0.f, 0.f);
+    settings.languageCode = @"en-US";
     
     int opt;
     extern int optind;
     extern char* optarg;
     extern int optopt;
-    while ((opt = getopt_long(argc, argv, "hvobkFsmpc:f:i:", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hvobkFsmpc:f:i:l:", long_options, NULL)) != -1) {
         switch (opt) {
             case 'o':
                 settings.disableOverlay = YES;
@@ -454,6 +484,7 @@ int main(int argc, char *argv[]) {
                 int _x, _y, _w, _h;
                 sscanf(optarg, "%02x,%02x,%02x,%02x", &_x, &_y, &_w, &_h);
                 settings.frame = NSMakeRect((float)_x, (float)_y, (float)_w, (float)_h);
+                settings.frameSet = YES;
                 break;
             }
             case 'k':
@@ -475,6 +506,9 @@ int main(int argc, char *argv[]) {
             case 'p':
                 settings.outputToClipboard = YES;
                 break;
+            case 'l':
+                settings.languageCode = [NSString stringWithUTF8String:optarg];
+                break;
             case 'v':
                 settings.enableVerboseMode = YES;
                 break;
@@ -488,10 +522,12 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    assert((state.tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, 0, kCGEventMaskForAllEvents, EventCallback, NULL)));
-    state.tapLoop = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, state.tap, 0);
-    CGEventTapEnable(state.tap, 1);
-    CFRunLoopAddSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
+    if (!settings.frameSet) {
+        assert((state.tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, 0, kCGEventMaskForAllEvents, EventCallback, NULL)));
+        state.tapLoop = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, state.tap, 0);
+        CGEventTapEnable(state.tap, 1);
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), state.tapLoop, kCFRunLoopCommonModes);
+    }
     
     @autoreleasepool {
         state.delegate = [AppDelegate new];
