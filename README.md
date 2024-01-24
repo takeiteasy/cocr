@@ -1,6 +1,6 @@
 # cocr
 
-_cocr_ **[ˈkɒkə]** is a general purpose CLI program using VNRecognizeTextRequest and screencapture to perform on screen OCR. The program is capable on single or periodic capturing, and includes a selection window if no frame is passed.
+_cocr_ **[ˈkɒkə]** is a general purpose CLI program using VNRecognizeTextRequest and screencapture to perform on-screen OCR. The program is capable of single or periodic capturing, and includes a selection window if no frame is passed.
 
 ```
 usage: cocr [options]
