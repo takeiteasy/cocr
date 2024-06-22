@@ -419,6 +419,7 @@ static struct option long_options[] = {
 
 static void usage(void) {
     puts("usage: cocr [options]");
+    puts("  https://github.com/takeiteasy/cocr");
     puts("");
     puts("  Description:");
     puts("    A general purpose CLI on-screen OCR for Mac");
